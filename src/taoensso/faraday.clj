@@ -85,6 +85,8 @@
              UpdateItemResult
              UpdateTableRequest
              UpdateTableResult
+             UpdateTimeToLiveRequest
+             UpdateTimeToLiveResult
              WriteRequest
 
              ConditionalCheckFailedException
@@ -1399,15 +1401,26 @@
                (range total-segments))
          (mapv deref))))
 
+(defn- update-ttl-request
+  [table duration]
+  (doto (UpdateTimeToLiveRequest.)
+    (.setTableName table)
+    ))
+
+(defn update-ttl
+  [client-opts table duration]
+  (.updateTimeToLive (db-client client-opts)
+                     (update-ttl-request table duration)))
+
 ;;;; DB Streams API
 ;; Ref. http://docs.aws.amazon.com/dynamodbstreams/latest/APIReference/Welcome.html
 
 (defn- list-streams-request
   [{:keys [table-name limit start-arn]}]
   (enc/doto-cond [_ (ListStreamsRequest.)]
-    table-name (.setTableName (name table-name))
-    limit (.setLimit (int limit))
-    start-arn (.setExclusiveStartStreamArn start-arn)))
+                 table-name (.setTableName (name table-name))
+                 limit (.setLimit (int limit))
+                 start-arn (.setExclusiveStartStreamArn start-arn)))
 
 (defn list-streams
   "Returns a lazy sequence of stream descriptions. Each item is a map of:
