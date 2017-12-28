@@ -81,6 +81,7 @@
              StreamSpecification
              StreamViewType
              TableDescription
+             TimeToLiveSpecification
              UpdateItemRequest
              UpdateItemResult
              UpdateTableRequest
@@ -539,7 +540,13 @@
   Stream
   (as-map [s]
     {:stream-arn (.getStreamArn s)
-     :table-name (.getTableName s)}))
+     :table-name (.getTableName s)})
+
+  UpdateTimeToLiveResult
+  (as-map [r]
+    (let [ttl-spec (.getTimeToLiveSpecification r)]
+      {:enabled? (.getEnabled ttl-spec)
+       :attribute-name (.getAttributeName ttl-spec)})))
 
 ;;;; Tables
 
@@ -1402,15 +1409,19 @@
          (mapv deref))))
 
 (defn- update-ttl-request
-  [table duration]
-  (doto (UpdateTimeToLiveRequest.)
-    (.setTableName table)
-    ))
+  [table enabled? key-name]
+  (let [ttl-spec (doto (TimeToLiveSpecification.)
+                   (.setEnabled enabled?)
+                   (.setAttributeName (name key-name)))]
+    (doto (UpdateTimeToLiveRequest.)
+      (.setTableName (name table))
+      (.setTimeToLiveSpecification ttl-spec))))
 
 (defn update-ttl
-  [client-opts table duration]
-  (.updateTimeToLive (db-client client-opts)
-                     (update-ttl-request table duration)))
+  [client-opts table enabled? key-name]
+  (as-map
+   (.updateTimeToLive (db-client client-opts)
+                      (update-ttl-request table enabled? key-name))))
 
 ;;;; DB Streams API
 ;; Ref. http://docs.aws.amazon.com/dynamodbstreams/latest/APIReference/Welcome.html
