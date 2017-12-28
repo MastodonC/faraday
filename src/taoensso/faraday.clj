@@ -40,6 +40,8 @@
              DeleteTableResult
              DescribeTableRequest
              DescribeTableResult
+             DescribeTimeToLiveRequest
+             DescribeTimeToLiveResult
              ExpectedAttributeValue
              GetItemRequest
              GetItemResult
@@ -81,6 +83,7 @@
              StreamSpecification
              StreamViewType
              TableDescription
+             TimeToLiveDescription
              TimeToLiveSpecification
              UpdateItemRequest
              UpdateItemResult
@@ -407,7 +410,7 @@
 
   QueryResult         (as-map [r] (am-query|scan-result r))
   ScanResult          (as-map [r] (am-query|scan-result r
-                                    {:scanned-count (.getScannedCount r)}))
+                                                        {:scanned-count (.getScannedCount r)}))
 
   BatchGetItemResult
   (as-map [r]
@@ -438,10 +441,10 @@
      (let [schema (as-map (.getKeySchema d))
            defs   (as-map (.getAttributeDefinitions d))]
        (merge-with merge
-         (reduce-kv (fn [m k v] (assoc m (:name v) {:key-type  (:type v)}))
-                    {} schema)
-         (reduce-kv (fn [m k v] (assoc m (:name v) {:data-type (:type v)}))
-                    {} defs)))})
+                   (reduce-kv (fn [m k v] (assoc m (:name v) {:key-type  (:type v)}))
+                              {} schema)
+                   (reduce-kv (fn [m k v] (assoc m (:name v) {:data-type (:type v)}))
+                              {} defs)))})
 
   DescribeTableResult (as-map [r] (as-map (.getTable r)))
   CreateTableResult   (as-map [r] (as-map (.getTableDescription r)))
@@ -466,6 +469,7 @@
     {:name       (keyword (.getIndexName d))
      :size       (.getIndexSizeBytes d)
      :item-count (.getItemCount d)
+     :status     (utils/un-enum (.getIndexStatus d))
      :key-schema (as-map (.getKeySchema d))
      :projection (as-map (.getProjection d))
      :throughput (as-map (.getProvisionedThroughput d))})
@@ -542,6 +546,12 @@
     {:stream-arn (.getStreamArn s)
      :table-name (.getTableName s)})
 
+  DescribeTimeToLiveResult
+  (as-map [r]
+    (let [ttl-desc (.getTimeToLiveDescription r)]
+      {:attribute-name (.getAttributeName ttl-desc)
+       :status (utils/un-enum (.getTimeToLiveStatus ttl-desc))}))
+
   UpdateTimeToLiveResult
   (as-map [r]
     (let [ttl-spec (.getTimeToLiveSpecification r)]
@@ -595,18 +605,19 @@
 (defn- index-status-watch
   "Returns a future to poll for index status.
   `index-type` - e/o #{:gsindexes :lsindexes} (currently only supports :gsindexes)"
-  [client-opts table index-type index-name & [{:keys [poll-ms]
+  [client-opts table index-type index-name & [{:keys [poll-ms status]
                                                :or   {poll-ms 1500}}]]
   (future
     (loop []
       (let [current-descr (describe-table client-opts table)
             [index]       (filterv #(= (:name %) (keyword index-name))
-                            (index-type current-descr))]
+                                   (index-type current-descr))]
         (cond
           (nil? index) nil
 
           (or (nil? (:size       index))
-              (nil? (:item-count index)))
+              (nil? (:item-count index))
+              (and status (not= status (:status index))))
           (do (Thread/sleep poll-ms)
               (recur))
 
@@ -876,8 +887,8 @@
           table-desc
           (do
             (.updateTable
-              (db-client client-opts)
-              (update-table-request table update-opts))
+             (db-client client-opts)
+             (update-table-request table update-opts))
             ;; Returns _new_ descr when ready:
             @(table-status-watch client-opts table :updating)))))))
 
@@ -1408,20 +1419,33 @@
                (range total-segments))
          (mapv deref))))
 
+(defn- describe-ttl-request
+  [{:keys [table-name]}]
+  (doto (DescribeTimeToLiveRequest.)
+    (.setTableName (name table-name))))
+
+(defn describe-ttl
+  [client-opts table-name]
+  (as-map
+   (.describeTimeToLive (db-client client-opts)
+                        (describe-ttl-request {:table-name table-name}))))
+
 (defn- update-ttl-request
-  [table enabled? key-name]
+  [{:keys [table-name enabled? key-name]}]
   (let [ttl-spec (doto (TimeToLiveSpecification.)
                    (.setEnabled enabled?)
                    (.setAttributeName (name key-name)))]
     (doto (UpdateTimeToLiveRequest.)
-      (.setTableName (name table))
+      (.setTableName (name table-name))
       (.setTimeToLiveSpecification ttl-spec))))
 
 (defn update-ttl
-  [client-opts table enabled? key-name]
+  [client-opts table-name enabled? key-name]
   (as-map
    (.updateTimeToLive (db-client client-opts)
-                      (update-ttl-request table enabled? key-name))))
+                      (update-ttl-request {:table-name table-name
+                                           :enabled? enabled?
+                                           :key-name key-name}))))
 
 ;;;; DB Streams API
 ;; Ref. http://docs.aws.amazon.com/dynamodbstreams/latest/APIReference/Welcome.html
