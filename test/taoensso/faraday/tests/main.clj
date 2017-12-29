@@ -18,13 +18,15 @@
 ;;;; Private var aliases
 
 (def index-status-watch #'taoensso.faraday/index-status-watch)
+(def table-status-watch #'taoensso.faraday/table-status-watch)
 
 ;;;; Config & setup
 
 (def ^:dynamic *client-opts*
   {:access-key (get (System/getenv) "AWS_DYNAMODB_ACCESS_KEY")
    :secret-key (get (System/getenv) "AWS_DYNAMODB_SECRET_KEY")
-   :endpoint   (get (System/getenv) "AWS_DYNAMODB_ENDPOINT")})
+   :endpoint   (get (System/getenv) "AWS_DYNAMODB_ENDPOINT")
+   :local?     (get (System/getenv) "AWS_DYNAMODB_LOCAL")})
 
 (def ttable      :faraday.tests.main)
 (def range-table :faraday.tests.range)
@@ -779,11 +781,15 @@
   (expect [{:name       :genre-index
             :size       0
             :item-count 0
+            :status     :active
             :key-schema [{:name :genre :type :hash}]
             :projection {:projection-type    "ALL"
                          :non-key-attributes nil}
-            :throughput {:read          1 :write 1 :last-decrease nil
-                         :last-increase nil :num-decreases-today nil}}]
+            :throughput {:read          1
+                         :write         1
+                         :last-decrease nil
+                         :last-increase nil
+                         :num-decreases-today 0}}]
           (:gsindexes created))
   (expect {:artist {:key-type :hash :data-type :s}
            :genre  {:data-type :s}} (:prim-keys created)))
@@ -803,12 +809,16 @@
   (expect [{:name       :genre-index
             :size       0
             :item-count 0
+            :status     :active
             :key-schema [{:name :genre :type :hash}
                          {:name :year :type :range}]
             :projection {:projection-type    "ALL"
                          :non-key-attributes nil}
-            :throughput {:read          1 :write 1 :last-decrease nil
-                         :last-increase nil :num-decreases-today nil}}]
+            :throughput {:read          1
+                         :write         1
+                         :last-decrease nil
+                         :last-increase nil
+                         :num-decreases-today 0}}]
           (:gsindexes created))
   (expect {:artist {:key-type :hash :data-type :s}
            :genre  {:data-type :s}
@@ -834,6 +844,7 @@
   (expect [{:name       :label-index
             :size       0
             :item-count 0
+            :status     :active
             :key-schema [{:name :label :type :hash}]
             :projection {:projection-type "KEYS_ONLY" :non-key-attributes nil}
             :throughput
@@ -841,10 +852,11 @@
                          :write               3
                          :last-decrease       nil
                          :last-increase       nil
-                         :num-decreases-today nil}}
+                         :num-decreases-today 0}}
            {:name       :genre-index
             :size       0
             :item-count 0
+            :status     :active
             :key-schema [{:name :genre :type :hash}]
             :projection {:projection-type "ALL" :non-key-attributes nil}
             :throughput
@@ -852,7 +864,7 @@
                          :write               1
                          :last-decrease       nil
                          :last-increase       nil
-                         :num-decreases-today nil}}]
+                         :num-decreases-today 0}}]
           (:gsindexes created))
   (expect {:artist {:key-type :hash :data-type :s}
            :genre  {:data-type :s}
@@ -923,6 +935,7 @@
   (expect [{:name       :label-index
             :size       0
             :item-count 0
+            :status     :active
             :key-schema [{:name :label :type :hash}]
             :projection {:projection-type "KEYS_ONLY" :non-key-attributes nil}
             :throughput
@@ -930,10 +943,11 @@
                          :write               4
                          :last-decrease       nil
                          :last-increase       nil
-                         :num-decreases-today nil}}
+                         :num-decreases-today 0}}
            {:name       :genre-index
             :size       0
             :item-count 0
+            :status     :active
             :key-schema [{:name :genre :type :hash}]
             :projection {:projection-type "ALL" :non-key-attributes nil}
             :throughput
@@ -941,7 +955,7 @@
                          :write               2
                          :last-decrease       nil
                          :last-increase       nil
-                         :num-decreases-today nil}}]
+                         :num-decreases-today 0}}]
           (:gsindexes created))
   (expect [{:name       :year-index
             :size       0
@@ -1045,13 +1059,14 @@
                                            :throughput  {:read 4 :write 2}
                                            }})
    ;; We need to wait until the index is created before updating it, or the call will fail
-   _ @(index-status-watch *client-opts* temp-table :gsindexes "genre-index")
+   _ @(index-status-watch *client-opts* temp-table :gsindexes "genre-index" {:status :active})
    inc-idx @(far/update-table *client-opts* temp-table
                               {:gsindexes {:operation  :update
                                            :name       "genre-index"
                                            :throughput {:read 6 :write 6}
                                            }})
    ;; We can create a second index right after
+   _ @(index-status-watch *client-opts* temp-table :gsindexes "genre-index" {:status :active})
    amt-idx @(far/update-table *client-opts* temp-table
                               {:gsindexes {:operation   :create
                                            :name        "amount-index"
@@ -1061,12 +1076,12 @@
    ;; Let's wait until amount-index is created before deleting genre-index,
    ;; so that we can consistently evaluate the result (otherwise we might not
    ;; know if size/item-count are 0 or nil.
-   _ @(index-status-watch *client-opts* temp-table :gsindexes "amount-index")
+   _ @(index-status-watch *client-opts* temp-table :gsindexes "amount-index" {:status :active})
    del-idx @(far/update-table *client-opts* temp-table
                               {:gsindexes {:operation :delete
                                            :name      "genre-index"
                                            }})
-   _ @(index-status-watch *client-opts* temp-table :gsindexes "genre-index")
+   _ @(index-status-watch *client-opts* temp-table :gsindexes "genre-index" {:status :deleting})
    ;; And get the final state
    fin-idx (far/describe-table *client-opts* temp-table)
    ]
@@ -1076,56 +1091,53 @@
           (dissoc new-idx :gsindexes :prim-keys))
   ;; We have a new index
   (expect [{:name       :genre-index
-            :size       nil
-            :item-count nil
+            :size       0
+            :item-count 0
+            :status     :creating
             :key-schema [{:name :genre :type :hash}]
             :projection {:projection-type "ALL" :non-key-attributes nil}
-            :throughput {:read 4 :write 2 :last-decrease nil :last-increase nil :num-decreases-today nil}}]
+            :throughput {:read 4 :write 2 :last-decrease nil :last-increase nil :num-decreases-today 0}}]
           (:gsindexes new-idx))
-  ;; The updated index has the new throughput values, as well as a size and
+  ;; The updated index indicates that it is updating; now has a size and
   ;; item-count since it was already created.
   (expect [{:name       :genre-index
             :size       0
             :item-count 0
+            :status     :updating
             :key-schema [{:name :genre :type :hash}]
             :projection {:projection-type "ALL" :non-key-attributes nil}
-            :throughput {:read 6 :write 6 :last-decrease nil :last-increase nil :num-decreases-today nil}}]
+            :throughput {:read 4 :write 2 :last-decrease nil :last-increase nil :num-decreases-today 0}}]
           (:gsindexes inc-idx))
   ;; The second index created comes back without a size or item count
-  (expect #{{:name       :amount-index
-             :size       nil
-             :item-count nil
-             :key-schema [{:name :amount :type :hash}]
-             :projection {:projection-type "ALL" :non-key-attributes nil}
-             :throughput {:read 1 :write 1 :last-decrease nil :last-increase nil :num-decreases-today nil}}
-            {:name       :genre-index
-             :size       0
-             :item-count 0
-             :key-schema [{:name :genre :type :hash}]
-             :projection {:projection-type "ALL" :non-key-attributes nil}
-             :throughput {:read 6 :write 6 :last-decrease nil :last-increase nil :num-decreases-today nil}}}
-          (set (:gsindexes amt-idx)))
+  ;; the genre index has finished updating
+  (expect {:name       :amount-index
+           :size       0
+           :item-count 0
+           :status     :creating
+           :key-schema [{:name :amount :type :hash}]
+           :projection {:projection-type "ALL" :non-key-attributes nil}
+           :throughput {:read 1 :write 1 :last-decrease nil :last-increase nil :num-decreases-today 0}}
+          (in (set (:gsindexes amt-idx))))
+  (when-let [gi-idx (some #(when (= :genre-index (:name %) %)) (:gsindexes amt-idx))]
+    (expect {:name :genre-index} (in gi-idx))
+    (expect {:status :active} (in gi-idx)))
   ;; When we request that the genre index be deleted, it returns that it's being destroyed
   (expect #{{:name       :amount-index
              :size       0
              :item-count 0
+             :status     :active
              :key-schema [{:name :amount :type :hash}]
              :projection {:projection-type "ALL" :non-key-attributes nil}
-             :throughput {:read 1 :write 1 :last-decrease nil :last-increase nil :num-decreases-today nil}}
-            {:name       :genre-index
-             :size       nil
-             :item-count nil
-             :key-schema [{:name :genre :type :hash}]
-             :projection {:projection-type "ALL" :non-key-attributes nil}
-             :throughput {:read 6 :write 6 :last-decrease nil :last-increase nil :num-decreases-today nil}}}
+             :throughput {:read 1 :write 1 :last-decrease nil :last-increase nil :num-decreases-today 0}}}
           (set (:gsindexes del-idx)))
   ;; And finally, we were left only with the amount index
   (expect [{:name       :amount-index
             :size       0
             :item-count 0
+            :status     :active
             :key-schema [{:name :amount :type :hash}]
             :projection {:projection-type "ALL" :non-key-attributes nil}
-            :throughput {:read 1 :write 1 :last-decrease nil :last-increase nil :num-decreases-today nil}}]
+            :throughput {:read 1 :write 1 :last-decrease nil :last-increase nil :num-decreases-today 0}}]
           (:gsindexes fin-idx))
   )
 
@@ -1182,16 +1194,16 @@
       :genre      "Progressive Rock"
       :label      "Universal Records"
       :year       2005}
-     {:artist     "The Darkest of the Hillside Thickets"
-      :song-title "The Shadow Out of Tim"
-      :genre      "Rock"
-      :label      "Divine Industries"
-      :year       2007}
      {:artist     "Carpenter Brut"
       :song-title "Le Perv"
       :genre      "Electro"
       :label      "Unknown"
-      :year       2012}]
+      :year       2012}
+     {:artist     "The Darkest of the Hillside Thickets"
+      :song-title "The Shadow Out of Tim"
+      :genre      "Rock"
+      :label      "Divine Industries"
+      :year       2007}]
     scanned)
   ;; We can't rely on items being in a particular order unless we use the item with a sort key
   (expect
@@ -1209,10 +1221,10 @@
       :year       2003}
      {:genre      "Progressive Rock"
       :year       2005}
-     {:genre      "Rock"
-      :year       2007}
      {:genre      "Electro"
-      :year       2012}]
+      :year       2012}
+     {:genre      "Rock"
+      :year       2007}]
     with-name)
   )
 
@@ -1281,8 +1293,8 @@
                           :serial-num (rand-int 100)) (range 100))]
   (expect temp-table (-> list-stream-response :table-name keyword))
   (expect string? stream-arn)
-  (doseq [chunk (partition 10 items)]
-    (far/batch-write-item *client-opts* {temp-table {:put chunk}}))
+  (doseq [item items] ;; no longer use batch-write-item as it breaks ordering
+    (far/put-item *client-opts* temp-table item))
   (let [stream (far/describe-stream *client-opts* stream-arn)
         shard-id (get-in stream [:shards 0 :shard-id])
         _ (expect string? shard-id)
@@ -1295,3 +1307,17 @@
        (expect {:old-image {}
                 :new-image item} (in record))))
   )
+
+;; Test updating the ttl
+(when-not (:local? *client-opts*)
+  (do-with-temp-table
+   [created (far/create-table *client-opts* temp-table
+                              [:id :n]
+                              {:throughput {:read 1 :write 1}
+                               :block? true})
+    before (far/describe-ttl *client-opts* temp-table)
+    result (far/update-ttl *client-opts* temp-table true :ttl)
+    after  (far/describe-ttl *client-opts* temp-table)]
+   (expect {:status :disabled :attribute-name nil} before)
+   (expect {:enabled? true :attribute-name "ttl"} result)
+   (expect {:status :enabled :attribute-name "ttl"} after)))
