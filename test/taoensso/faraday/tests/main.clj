@@ -1142,90 +1142,90 @@
 
 ;; We can scan with an index, and do projections
 (do-with-temp-table
- [created (far/create-table *client-opts* temp-table
-                            [:artist :s]
-                            {:range-keydef [:song-title :s]          ; Need a range key for it to accept a local secondary index
-                             :gsindexes    [{:name        "genre-index"
-                                             :hash-keydef [:genre :s]
-                                             :throughput  {:read 1 :write 2}}
-                                            {:name        "label-index"
-                                             :hash-keydef [:label :s]
-                                             :throughput  {:read 3 :write 4}
-                                             :projection  :keys-only}
-                                            ]
-                             :lsindexes    [{:name         "year-index"
-                                             :range-keydef [:year :n]}]
-                             :throughput   {:read 1 :write 1}
-                             :block?       true})
-  items     [{:artist     "Carpenter Brut"
-              :song-title "Le Perv"
-              :genre      "Electro"
-              :label      "Unknown"
-              :year       2012}
-             {:artist     "The Mars Volta"
-              :song-title "Eriatarka"
-              :genre      "Progressive Rock"
-              :label      "Universal Records"
-              :year       2003}
-             {:artist     "The Darkest of the Hillside Thickets"
-              :song-title "The Shadow Out of Tim"
-              :genre      "Rock"
-              :label      "Divine Industries"
-              :year       2007}
-             {:artist     "The Mars Volta"
-              :song-title "Cassandra Gemini"
-              :genre      "Progressive Rock"
-              :label      "Universal Records"
-              :year       2005}]
-  _         (doall (map #(far/put-item *client-opts* temp-table %) items))
-  scanned   (far/scan *client-opts* temp-table {:attr-conds {:year [:ge 2005]}
-                                                :index      "year-index"})
-  projected (far/scan *client-opts* temp-table {:proj-expr "genre, artist"
-                                                :index     "genre-index"})
-  with-name (far/scan *client-opts* temp-table {:proj-expr       "genre, #y"
-                                                :index           "year-index"
-                                                :expr-attr-names {"#y" "year"}})
-  ]
- ;; Querying for a range key returns items sorted
- (expect
-  [{:artist     "The Mars Volta"
-    :song-title "Cassandra Gemini"
-    :genre      "Progressive Rock"
-    :label      "Universal Records"
-    :year       2005}
-   {:artist     "Carpenter Brut"
-    :song-title "Le Perv"
-    :genre      "Electro"
-    :label      "Unknown"
-    :year       2012}
-   {:artist     "The Darkest of the Hillside Thickets"
-    :song-title "The Shadow Out of Tim"
-    :genre      "Rock"
-    :label      "Divine Industries"
-    :year       2007}]
-  scanned)
- ;; We can't rely on items being in a particular order unless we use the item with a sort key
- (expect
-  #{{:artist "The Mars Volta"
-     :genre  "Progressive Rock"}
-    {:artist "The Darkest of the Hillside Thickets"
-     :genre  "Rock"}
-    {:artist "Carpenter Brut"
-     :genre  "Electro"}}
-  (set projected))
- (expect 4 (count projected))
- ;; We can request projections with expression attribute names
- (expect
-  [{:genre      "Progressive Rock"
-    :year       2003}
-   {:genre      "Progressive Rock"
-    :year       2005}
-   {:genre      "Electro"
-    :year       2012}
-   {:genre      "Rock"
-    :year       2007}]
-  with-name)
- )
+  [created (far/create-table *client-opts* temp-table
+                             [:artist :s]
+                             {:range-keydef [:song-title :s]          ; Need a range key for it to accept a local secondary index
+                              :gsindexes    [{:name        "genre-index"
+                                              :hash-keydef [:genre :s]
+                                              :throughput  {:read 1 :write 2}}
+                                             {:name        "label-index"
+                                              :hash-keydef [:label :s]
+                                              :throughput  {:read 3 :write 4}
+                                              :projection  :keys-only}
+                                             ]
+                              :lsindexes    [{:name         "year-index"
+                                              :range-keydef [:year :n]}]
+                              :throughput   {:read 1 :write 1}
+                              :block?       true})
+   items     [{:artist     "Carpenter Brut"
+               :song-title "Le Perv"
+               :genre      "Electro"
+               :label      "Unknown"
+               :year       2012}
+              {:artist     "The Mars Volta"
+               :song-title "Eriatarka"
+               :genre      "Progressive Rock"
+               :label      "Universal Records"
+               :year       2003}
+              {:artist     "The Darkest of the Hillside Thickets"
+               :song-title "The Shadow Out of Tim"
+               :genre      "Rock"
+               :label      "Divine Industries"
+               :year       2007}
+              {:artist     "The Mars Volta"
+               :song-title "Cassandra Gemini"
+               :genre      "Progressive Rock"
+               :label      "Universal Records"
+               :year       2005}]
+   _         (doall (map #(far/put-item *client-opts* temp-table %) items))
+   scanned   (far/scan *client-opts* temp-table {:attr-conds {:year [:ge 2005]}
+                                                 :index      "year-index"})
+   projected (far/scan *client-opts* temp-table {:proj-expr "genre, artist"
+                                                 :index     "genre-index"})
+   with-name (far/scan *client-opts* temp-table {:proj-expr       "genre, #y"
+                                                 :index           "year-index"
+                                                 :expr-attr-names {"#y" "year"}})
+   ]
+  ;; Querying for a range key returns items sorted
+  (expect
+    [{:artist     "The Mars Volta"
+      :song-title "Cassandra Gemini"
+      :genre      "Progressive Rock"
+      :label      "Universal Records"
+      :year       2005}
+     {:artist     "Carpenter Brut"
+      :song-title "Le Perv"
+      :genre      "Electro"
+      :label      "Unknown"
+      :year       2012}
+     {:artist     "The Darkest of the Hillside Thickets"
+      :song-title "The Shadow Out of Tim"
+      :genre      "Rock"
+      :label      "Divine Industries"
+      :year       2007}]
+    scanned)
+  ;; We can't rely on items being in a particular order unless we use the item with a sort key
+  (expect
+    #{{:artist "The Mars Volta"
+       :genre  "Progressive Rock"}
+      {:artist "The Darkest of the Hillside Thickets"
+       :genre  "Rock"}
+      {:artist "Carpenter Brut"
+       :genre  "Electro"}}
+    (set projected))
+  (expect 4 (count projected))
+  ;; We can request projections with expression attribute names
+  (expect
+    [{:genre      "Progressive Rock"
+      :year       2003}
+     {:genre      "Progressive Rock"
+      :year       2005}
+     {:genre      "Electro"
+      :year       2012}
+     {:genre      "Rock"
+      :year       2007}]
+    with-name)
+  )
 
 
 ;;; Test `list-tables` lazy sequence
