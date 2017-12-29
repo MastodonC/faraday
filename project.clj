@@ -42,7 +42,7 @@
    :source-uri "https://github.com/ptaoussanis/faraday/blob/master/{filepath}#L{line}"}
 
   :aliases
-  {"test-all"   ["with-profile" "+1.9" "expectations"] ;; "+1.9:+1.8:+1.7:+1.6:+1.5"
+  {"test-all"   ["with-profile" "+1.9:+1.8:+1.7:+1.6:+1.5" "expectations"]
    "test-auto"  ["with-profile" "+test" "autoexpect"]
    "deploy-lib" ["do" "deploy" "clojars," "install"]
    "start-dev"  ["with-profile" "+dev" "repl" ":headless"]}
