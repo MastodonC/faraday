@@ -410,7 +410,7 @@
 
   QueryResult         (as-map [r] (am-query|scan-result r))
   ScanResult          (as-map [r] (am-query|scan-result r
-                                                        {:scanned-count (.getScannedCount r)}))
+                                    {:scanned-count (.getScannedCount r)}))
 
   BatchGetItemResult
   (as-map [r]
@@ -441,10 +441,10 @@
      (let [schema (as-map (.getKeySchema d))
            defs   (as-map (.getAttributeDefinitions d))]
        (merge-with merge
-                   (reduce-kv (fn [m k v] (assoc m (:name v) {:key-type  (:type v)}))
-                              {} schema)
-                   (reduce-kv (fn [m k v] (assoc m (:name v) {:data-type (:type v)}))
-                              {} defs)))})
+         (reduce-kv (fn [m k v] (assoc m (:name v) {:key-type  (:type v)}))
+                    {} schema)
+         (reduce-kv (fn [m k v] (assoc m (:name v) {:data-type (:type v)}))
+                    {} defs)))})
 
   DescribeTableResult (as-map [r] (as-map (.getTable r)))
   CreateTableResult   (as-map [r] (as-map (.getTableDescription r)))
@@ -611,7 +611,7 @@
     (loop []
       (let [current-descr (describe-table client-opts table)
             [index]       (filterv #(= (:name %) (keyword index-name))
-                                   (index-type current-descr))]
+                            (index-type current-descr))]
         (cond
           (nil? index) nil
 
@@ -887,8 +887,8 @@
           table-desc
           (do
             (.updateTable
-             (db-client client-opts)
-             (update-table-request table update-opts))
+              (db-client client-opts)
+              (update-table-request table update-opts))
             ;; Returns _new_ descr when ready:
             @(table-status-watch client-opts table :updating)))))))
 
@@ -1453,9 +1453,9 @@
 (defn- list-streams-request
   [{:keys [table-name limit start-arn]}]
   (enc/doto-cond [_ (ListStreamsRequest.)]
-                 table-name (.setTableName (name table-name))
-                 limit (.setLimit (int limit))
-                 start-arn (.setExclusiveStartStreamArn start-arn)))
+    table-name (.setTableName (name table-name))
+    limit (.setLimit (int limit))
+    start-arn (.setExclusiveStartStreamArn start-arn)))
 
 (defn list-streams
   "Returns a lazy sequence of stream descriptions. Each item is a map of:
