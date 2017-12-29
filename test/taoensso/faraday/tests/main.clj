@@ -786,7 +786,7 @@
             :projection {:projection-type    "ALL"
                          :non-key-attributes nil}
             :throughput {:read          1
-                         :write 1
+                         :write         1
                          :last-decrease nil
                          :last-increase nil
                          :num-decreases-today 0}}]
@@ -815,7 +815,7 @@
             :projection {:projection-type    "ALL"
                          :non-key-attributes nil}
             :throughput {:read          1
-                         :write 1
+                         :write         1
                          :last-decrease nil
                          :last-increase nil
                          :num-decreases-today 0}}]
@@ -1138,7 +1138,8 @@
             :key-schema [{:name :amount :type :hash}]
             :projection {:projection-type "ALL" :non-key-attributes nil}
             :throughput {:read 1 :write 1 :last-decrease nil :last-increase nil :num-decreases-today 0}}]
-          (:gsindexes fin-idx)))
+          (:gsindexes fin-idx))
+  )
 
 ;; We can scan with an index, and do projections
 (do-with-temp-table
